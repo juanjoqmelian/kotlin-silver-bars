@@ -14,37 +14,43 @@ class SilverBarsLiveOrderBoard : LiveOrderBoard {
     }
 
     override fun summary(): SummaryInfo {
-        return SummaryInfo(*orders
-            .groupBy { order -> order.type }
-            .toSortedMap()
-            .map { ordersByType ->
-                ordersByType.value.groupBy { order -> order.price }
-                    .map { ordersByPrice ->
-                        ordersByPrice.value
-                            .reduce { left, right ->
-                                Order(
-                                    right.userId,
-                                    left.quantity.plus(right.quantity),
-                                    right.price,
-                                    right.type
-                                )
-                            }
-                    }
-                    .sortedWith(comparatorByType(ordersByType))
-            }
-            .flatten()
-            .map { order -> order.summary() }
-            .toTypedArray())
+        return SummaryInfo(
+            *orders
+                .groupBy { order -> order.type }
+                .toSortedMap()
+                .map { ordersByType ->
+                    groupOrdersWithSamePrice(ordersByType)
+                        .sortedWith(comparatorByType(ordersByType))
+                }
+                .flatten()
+                .map { order -> order.summary() }
+                .toTypedArray()
+        )
     }
 
     override fun register(order: Order): String {
         require(order.isValid()) { "Order is not valid!" }
-        val orderId = UUID.randomUUID().toString()
-        order.id = orderId
+        order.id = UUID.randomUUID().toString()
         orders.add(order)
-        return orderId
+        return order.id
     }
 
+
+    private fun groupOrdersWithSamePrice(ordersByType: Map.Entry<OrderType, List<Order>>): List<Order> {
+        return ordersByType.value
+            .groupBy { order -> order.price }
+            .map { ordersByPrice ->
+                ordersByPrice.value
+                    .reduce { left, right ->
+                        Order(
+                            right.userId,
+                            left.quantity.plus(right.quantity),
+                            right.price,
+                            right.type
+                        )
+                    }
+            }
+    }
 
     private fun comparatorByType(entry: Map.Entry<OrderType, List<Order>>): java.util.Comparator<Order> {
         return Comparator { left, right ->
